@@ -1,7 +1,6 @@
 /* -*- Mode:C++; c-file-style:"gnu"; indent-tabs-mode:nil; -*- */
 /*
- * Copyright 2024 Universidade do Estado do Rio de Janeiro
- * Adapted from 
+ * Copyright 2016 Technische Universitaet Berlin
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 as
@@ -18,7 +17,8 @@
  */
 
 // - TCP Stream server and user-defined number of clients connected with an AP
-// - Cable connected and possibility to change the tcp mechanism
+// - WiFi connection
+// - Tracing of throughput, packet information is done in the client
 
 #include "ns3/point-to-point-helper.h"
 #include <fstream>
@@ -68,7 +68,6 @@ main (int argc, char *argv[])
   uint32_t simulationId;
   uint32_t numberOfClients;
   std::string adaptationAlgo;
-  std::string tcpVariant;
   std::string segmentSizeFilePath;
 
   bool shortGuardInterval = true;
@@ -80,20 +79,9 @@ main (int argc, char *argv[])
   cmd.AddValue ("segmentDuration", "The duration of a video segment in microseconds", segmentDuration);
   cmd.AddValue ("adaptationAlgo", "The adaptation algorithm that the client uses for the simulation", adaptationAlgo);
   cmd.AddValue ("segmentSizeFile", "The relative path (from ns-3.x directory) to the file containing the segment sizes in bytes", segmentSizeFilePath);
-  cmd.AddValue("tcpVariant",
-                 "Transport protocol to use: TcpNewReno, "
-                 "TcpHybla, TcpHighSpeed, TcpHtcp, TcpVegas, TcpScalable, TcpVeno, "
-                 "TcpBic, TcpYeah, TcpIllinois, TcpWestwood, TcpWestwoodPlus, TcpLedbat ",
-                 tcpVariant);
   cmd.Parse (argc, argv);
 
-  tcpVariant = std::string("ns3::") + tcpVariant;
-    // Select TCP variant
-    TypeId tcpTid;
-    NS_ABORT_MSG_UNLESS(TypeId::LookupByNameFailSafe(tcpVariant, &tcpTid),
-                        "TypeId " << tcpVariant << " not found");
-    Config::SetDefault("ns3::TcpL4Protocol::SocketType",
-                       TypeIdValue(TypeId::LookupByName(tcpVariant)));
+
   Config::SetDefault("ns3::TcpSocket::SegmentSize", UintegerValue (1446));
   Config::SetDefault("ns3::TcpSocket::SndBufSize", UintegerValue (524288));
   Config::SetDefault("ns3::TcpSocket::RcvBufSize", UintegerValue (524288));
