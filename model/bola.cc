@@ -1,6 +1,6 @@
 /**
 
-  Bola ABR (based on dash.js implementation)
+Bola ABR (based on dash.js implementation)
 
 **/
 
@@ -12,7 +12,10 @@ namespace ns3 {
   NS_LOG_COMPONENT_DEFINE ("BolaAlgo");
   NS_OBJECT_ENSURE_REGISTERED (BolaAlgo);
 
-  BolaAlgo::BolaAlgo (const videoData &videoData, const playbackData & playbackData, const bufferData & bufferData, const throughputData & throughput) : AdaptationAlgorithm (videoData, playbackData, bufferData, throughput), m_highestRepIndex (videoData.averageBitrate.size () - 1) {
+  BolaAlgo::BolaAlgo (const videoData &videoData, const playbackData & playbackData, const bufferData & bufferData, const throughputData & throughput) : 
+    AdaptationAlgorithm (videoData, playbackData, bufferData, throughput), 
+    m_highestRepIndex (videoData.averageBitrate.size () - 1)
+ {
     NS_LOG_INFO (this);
     NS_ASSERT_MSG (m_highestRepIndex >= 0, "The highest quality representation index should be >= 0");
   }
@@ -25,19 +28,23 @@ namespace ns3 {
     int64_t bDelay = 0;
     const int64_t timeNow = Simulator::Now ().GetMicroSeconds ();
 
-    if(segmentCounter == 0) {  
-	    segDuration = m_videoData.segmentDuration;
-      m_lastRepIndex = nextRepIndex;
-      algorithmReply answer;
-      answer.nextRepIndex = nextRepIndex;
-      answer.nextDownloadDelay = bDelay;
-      answer.decisionTime = timeNow;
-      answer.decisionCase = decisionCase;
-      answer.delayDecisionCase = delayDecision;
-	  answer.bandwidthEstimate = 0;
-      return answer;
+    if(segmentCounter == 0) {
+
+        segDuration = m_videoData.segmentDuration;
+
+        m_lastRepIndex = nextRepIndex;
+        algorithmReply answer;
+        answer.nextRepIndex = nextRepIndex;
+        answer.nextDownloadDelay = bDelay;
+        answer.decisionTime = timeNow;
+        answer.decisionCase = decisionCase;
+        answer.delayDecisionCase = delayDecision;
+        answer.bandwidthEstimate = 0;  
+        answer.bufferEstimate = 0;
+        answer.secondBandwidthEstimate = 0;
+        return answer;
     }
-   
+
     if(state == BOLA_STATE_INIT) {
       
       for(int i=0; i<=m_highestRepIndex; i++) {
@@ -55,18 +62,22 @@ namespace ns3 {
       calculateBolaParameters();
 
       state = BOLA_STATE_STARTUP;
-      
 
     }
 
     double throughput = AverageSegmentThroughput(segmentCounter)/1000;
     
+    
+    algorithmReply answer;
+    answer.secondBandwidthEstimate = 0;
     if(state == BOLA_STATE_STARTUP) {
 
         int quality = getQualityForBitrate(throughput);
 
         nextRepIndex = quality;
+
         double bufferLevel = (m_bufferData.bufferLevelNew.back ()/ (double)1000000 - (timeNow - m_bufferData.timeNow.back())/ (double)1000000);
+        answer.bufferEstimate = bufferLevel;
 
         if (bufferLevel >= (segDuration/1000000)) {
             state = BOLA_STATE_STEADY;
@@ -75,6 +86,7 @@ namespace ns3 {
     } else if(state == BOLA_STATE_STEADY) {
 
         double bufferLevel = (m_bufferData.bufferLevelNew.back ()/ (double)1000000 - (timeNow - m_bufferData.timeNow.back())/ (double)1000000);
+        answer.bufferEstimate = bufferLevel;
         int quality = getQualityFromBufferLevel(bufferLevel);
 
         int qualityForThroughput = getQualityForBitrate(throughput);
@@ -92,13 +104,12 @@ namespace ns3 {
 
 
     m_lastRepIndex = nextRepIndex;
-    algorithmReply answer;
     answer.nextRepIndex = nextRepIndex;
     answer.nextDownloadDelay = bDelay;
     answer.decisionTime = timeNow;
     answer.decisionCase = decisionCase;
     answer.delayDecisionCase = delayDecision;
-	answer.bandwidthEstimate = throughput/1000;
+    answer.bandwidthEstimate = throughput/1000;
     return answer;
   }
 
@@ -114,12 +125,9 @@ namespace ns3 {
       lengthOfInterval = (m_throughput.transmissionEnd.at (index) - m_throughput.transmissionStart.at (index))/(double)1000000;
       sumThroughput += m_throughput.bytesReceived.at(index);
       transmissionTime += lengthOfInterval;
-      count++;
-      if(count > 4) break;
-    }
+      count++;}
 
     return (sumThroughput*8 / (double)transmissionTime);
-
   }
 
   void BolaAlgo::calculateBolaParameters() {
@@ -174,14 +182,13 @@ namespace ns3 {
   
   int BolaAlgo::getQualityForBitrate(double bitrate) {
     int quality = m_highestRepIndex;
-    for(int i=0; i<=m_highestRepIndex; i++) {
+    for(int i=0; i<=m_highestRepIndex; i++) {   
       if(bitrate <= bitrates[i]) {
-        quality = i-1;
+        quality = std::max(0, i - 1);
         break;
       }
     }
     if(std::isnan(bitrate)) { quality = 0; }
     return quality;
   }
-  
 } // namespace ns3
