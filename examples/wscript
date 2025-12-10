@@ -1,5 +1,12 @@
 # -*- Mode: python; py-indent-offset: 4; indent-tabs-mode: nil; coding: utf-8; -*-
 
 def build(bld):
-    obj = bld.create_ns3_program('tcp-stream-variant', ['dash', 'internet', 'wifi', 'buildings', 'applications', 'point-to-point', 'netanim', 'csma'])
-    obj.source = 'tcp-stream-variant.cc'
+    obj = bld.create_ns3_program('tcp-stream', ['dash', 'internet', 'wifi', 'buildings', 'applications', 'point-to-point'])
+    obj.source = 'tcp-stream.cc'
+    obj = bld.create_ns3_program('tcp-stream-pel-uerj', ['dash','csma', 'internet', 'wifi', 'buildings', 'flow-monitor', 'applications', 'point-to-point'])
+    obj.source = 'tcp-stream-pel-uerj.cc'
+    obj = bld.create_ns3_program('tcp-stream-pel-uerj-wifi', ['dash','csma', 'internet', 'wifi', 'buildings', 'flow-monitor', 'applications', 'point-to-point', 'netanim'])
+    obj.source = 'tcp-stream-pel-uerj-wifi.cc'
+    obj = bld.create_ns3_program('view-cc', ['dash', 'internet', 'wifi', 'buildings', 'applications', 'point-to-point'])
+    obj.source = 'view-cc.cc'
+
