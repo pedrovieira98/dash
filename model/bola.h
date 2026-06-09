@@ -44,4 +44,8 @@ private:
   uint64_t segDuration;
 };
 } // namespace ns3
+<<<<<<< HEAD
 #endif /* BOLA_ALGORITHM_H */
+=======
+#endif /* BOLA_ALGORITHM_H */
+>>>>>>> 4ccd20a (Update)

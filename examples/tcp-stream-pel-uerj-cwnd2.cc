@@ -38,7 +38,9 @@
 #include "ns3/flow-monitor-module.h"
 #include "ns3/tcp-stream-helper.h"
 #include "ns3/tcp-stream-interface.h"
+#include "ns3/internet-stack-helper.h"
 #include "ns3/packet-sink.h"
+#include "ns3/tcp-westwood.h"
 #include "ns3/packet-sink-helper.h"
 
 template <typename T>
@@ -51,42 +53,155 @@ std::string ToString(T val)
 
 using namespace ns3;
 
-NS_LOG_COMPONENT_DEFINE ("TcpStreamExample");
+NS_LOG_COMPONENT_DEFINE ("TcpVariantsComparison");
 
-Ptr<PacketSink> sink;                         /* Pointer to the packet sink application */
-uint64_t lastTotalRx = 0;                     /* The value of the last total received bytes */
+static bool firstCwnd = true;
+static bool firstSshThr = true;
+static bool firstRtt = true;
+static bool firstRto = true;
+static Ptr<OutputStreamWrapper> cWndStream;
+static Ptr<OutputStreamWrapper> ssThreshStream;
+static Ptr<OutputStreamWrapper> rttStream;
+static Ptr<OutputStreamWrapper> rtoStream;
+static Ptr<OutputStreamWrapper> nextTxStream;
+static Ptr<OutputStreamWrapper> nextRxStream;
+static Ptr<OutputStreamWrapper> inFlightStream;
+static uint32_t cWndValue;
+static uint32_t ssThreshValue;
 
-/*void
-CalculateThroughput ()
-{
-  Time now = Simulator::Now ();                                         // Return the simulator's virtual time. 
-  double cur = (sink->GetTotalRx () - lastTotalRx) * (double) 8 / 1e5;     // Convert Application RX Packets to MBits. 
-  std::cout << now.GetSeconds () << "s: \t" << cur << " Mbit/s" << std::endl;
-  lastTotalRx = sink->GetTotalRx ();
-  Simulator::Schedule (MilliSeconds (100), &CalculateThroughput);
-}*/
 
 static void
-CwndChange (Ptr<OutputStreamWrapper> stream, uint32_t oldCwnd, uint32_t newCwnd)
+CwndTracer (uint32_t oldval, uint32_t newval)
 {
-  std::cout << "Im here" << std::endl;
-  NS_LOG_UNCOND(Simulator::Now().GetSeconds() << "\t" << newCwnd);
-  std::cout << Simulator::Now().GetSeconds() << "\t" << oldCwnd << "\t" << newCwnd
-                       << std::endl;
+  if (firstCwnd)
+    {
+      *cWndStream->GetStream () << "0.0 " << oldval << std::endl;
+      firstCwnd = false;
+    }
+  *cWndStream->GetStream () << Simulator::Now ().GetSeconds () << " " << newval << std::endl;
+  cWndValue = newval;
+
+  if (!firstSshThr)
+    {
+      *ssThreshStream->GetStream () << Simulator::Now ().GetSeconds () << " " << ssThreshValue << std::endl;
+    }
 }
 
-// Connect the CongestionWindow trace for every TCP socket created
 static void
-SocketCreated (Ptr<OutputStreamWrapper> stream, Ptr<Socket> socket)
+SsThreshTracer (uint32_t oldval, uint32_t newval)
 {
-  std::cout << "Im here 2" << std::endl;
-  // Guard: only hook TCP sockets
-  if (socket->GetInstanceTypeId().GetParent() == TcpSocket::GetTypeId())
+  if (firstSshThr)
     {
-      socket->TraceConnectWithoutContext(
-          "CongestionWindow",
-          MakeBoundCallback(&CwndChange, stream));
+      *ssThreshStream->GetStream () << "0.0 " << oldval << std::endl;
+      firstSshThr = false;
     }
+  *ssThreshStream->GetStream () << Simulator::Now ().GetSeconds () << " " << newval << std::endl;
+  ssThreshValue = newval;
+
+  if (!firstCwnd)
+    {
+      *cWndStream->GetStream () << Simulator::Now ().GetSeconds () << " " << cWndValue << std::endl;
+    }
+}
+
+static void
+RttTracer (Time oldval, Time newval)
+{
+  if (firstRtt)
+    {
+      *rttStream->GetStream () << "0.0 " << oldval.GetSeconds () << std::endl;
+      firstRtt = false;
+    }
+  *rttStream->GetStream () << Simulator::Now ().GetSeconds () << " " << newval.GetSeconds () << std::endl;
+}
+
+static void
+RtoTracer (Time oldval, Time newval)
+{
+  if (firstRto)
+    {
+      *rtoStream->GetStream () << "0.0 " << oldval.GetSeconds () << std::endl;
+      firstRto = false;
+    }
+  *rtoStream->GetStream () << Simulator::Now ().GetSeconds () << " " << newval.GetSeconds () << std::endl;
+}
+
+static void
+NextTxTracer (SequenceNumber32 old, SequenceNumber32 nextTx)
+{
+  NS_UNUSED (old);
+  *nextTxStream->GetStream () << Simulator::Now ().GetSeconds () << " " << nextTx << std::endl;
+}
+
+static void
+InFlightTracer (uint32_t old, uint32_t inFlight)
+{
+  NS_UNUSED (old);
+  *inFlightStream->GetStream () << Simulator::Now ().GetSeconds () << " " << inFlight << std::endl;
+}
+
+static void
+NextRxTracer (SequenceNumber32 old, SequenceNumber32 nextRx)
+{
+  NS_UNUSED (old);
+  *nextRxStream->GetStream () << Simulator::Now ().GetSeconds () << " " << nextRx << std::endl;
+}
+
+static void
+TraceCwnd (std::string cwnd_tr_file_name)
+{
+  AsciiTraceHelper ascii;
+  cWndStream = ascii.CreateFileStream (cwnd_tr_file_name.c_str ());
+  Config::ConnectWithoutContext ("/NodeList/1/$ns3::TcpL4Protocol/SocketList/0/CongestionWindow", MakeCallback (&CwndTracer));
+}
+
+static void
+TraceSsThresh (std::string ssthresh_tr_file_name)
+{
+  AsciiTraceHelper ascii;
+  ssThreshStream = ascii.CreateFileStream (ssthresh_tr_file_name.c_str ());
+  Config::ConnectWithoutContext ("/NodeList/1/$ns3::TcpL4Protocol/SocketList/0/SlowStartThreshold", MakeCallback (&SsThreshTracer));
+}
+
+static void
+TraceRtt (std::string rtt_tr_file_name)
+{
+  AsciiTraceHelper ascii;
+  rttStream = ascii.CreateFileStream (rtt_tr_file_name.c_str ());
+  Config::ConnectWithoutContext ("/NodeList/1/$ns3::TcpL4Protocol/SocketList/0/RTT", MakeCallback (&RttTracer));
+}
+
+static void
+TraceRto (std::string rto_tr_file_name)
+{
+  AsciiTraceHelper ascii;
+  rtoStream = ascii.CreateFileStream (rto_tr_file_name.c_str ());
+  Config::ConnectWithoutContext ("/NodeList/1/$ns3::TcpL4Protocol/SocketList/0/RTO", MakeCallback (&RtoTracer));
+}
+
+static void
+TraceNextTx (std::string &next_tx_seq_file_name)
+{
+  AsciiTraceHelper ascii;
+  nextTxStream = ascii.CreateFileStream (next_tx_seq_file_name.c_str ());
+  Config::ConnectWithoutContext ("/NodeList/1/$ns3::TcpL4Protocol/SocketList/0/NextTxSequence", MakeCallback (&NextTxTracer));
+}
+
+static void
+TraceInFlight (std::string &in_flight_file_name)
+{
+  AsciiTraceHelper ascii;
+  inFlightStream = ascii.CreateFileStream (in_flight_file_name.c_str ());
+  Config::ConnectWithoutContext ("/NodeList/1/$ns3::TcpL4Protocol/SocketList/0/BytesInFlight", MakeCallback (&InFlightTracer));
+}
+
+
+static void
+TraceNextRx (std::string &next_rx_seq_file_name)
+{
+  AsciiTraceHelper ascii;
+  nextRxStream = ascii.CreateFileStream (next_rx_seq_file_name.c_str ());
+  Config::ConnectWithoutContext ("/NodeList/2/$ns3::TcpL4Protocol/SocketList/1/RxBuffer/NextRxSequence", MakeCallback (&NextRxTracer));
 }
 
 int
@@ -118,6 +233,12 @@ SeedManager::SetSeed(r); // Set the seed to the desired number
   std::string segmentSizeFilePath;
   std::string tcpVariant, save_tcpVariant;
   std::string linkrate;
+  bool tracing = true;
+  std::string prefix_file_name = "tcp-cwnd-2";
+  //bool flow_monitor = true;
+  //bool sack = true;
+  std::string queue_disc_type = "ns3::PfifoFastQueueDisc";
+  std::string recovery = "ns3::TcpClassicRecovery";
 
   CommandLine cmd;
   cmd.Usage ("Simulation of streaming with DASH.\n");
@@ -153,6 +274,7 @@ SeedManager::SetSeed(r); // Set the seed to the desired number
   count = count + simulationId;
 
   while (simulationId < count){
+
     //seed = simulationId;
     std::cout << "Starting round: " << simulationId << std::endl;
     std::cout << "This seed: " << seed << std::endl;
@@ -162,9 +284,9 @@ SeedManager::SetSeed(r); // Set the seed to the desired number
     // SeedManager::SetSeed(r); // Set the seed to the desired number
     ns3::RngSeedManager::SetSeed(seed);
 
-    Config::SetDefault("ns3::TcpSocket::SegmentSize", UintegerValue (1446));
-    Config::SetDefault("ns3::TcpSocket::SndBufSize", UintegerValue (524288));
-    Config::SetDefault("ns3::TcpSocket::RcvBufSize", UintegerValue (524288));
+    //Config::SetDefault("ns3::TcpSocket::SegmentSize", UintegerValue (1446));
+    //Config::SetDefault("ns3::TcpSocket::SndBufSize", UintegerValue (2812500));
+    //Config::SetDefault("ns3::TcpSocket::RcvBufSize", UintegerValue (2812500));
 
     NS_LOG_INFO("Create nodes.");
       
@@ -176,12 +298,9 @@ SeedManager::SetSeed(r); // Set the seed to the desired number
     csmaNodes.Create (numberOfClients);	
 
     PointToPointHelper pointToPoint;
-    pointToPoint.SetDeviceAttribute ("DataRate", StringValue ("100Mbps"));
-<<<<<<< HEAD
-    pointToPoint.SetChannelAttribute ("Delay", StringValue ("45ms"));
-=======
+    pointToPoint.SetDeviceAttribute ("DataRate", StringValue ("1Mbps"));
+    pointToPoint.SetDeviceAttribute ("Mtu", UintegerValue (1500));
     pointToPoint.SetChannelAttribute ("Delay", StringValue ("25ms"));
->>>>>>> 4ccd20a (Update)
 
     NetDeviceContainer p2pDevices;
     p2pDevices = pointToPoint.Install (p2pNodes);
@@ -189,12 +308,15 @@ SeedManager::SetSeed(r); // Set the seed to the desired number
     // linkrate = std::to_string(numberOfClients*1) + "Mbps"; //link of 1Mbps per client
 
     CsmaHelper csma;
-<<<<<<< HEAD
-    csma.SetChannelAttribute ("DataRate", StringValue ("100Mbps"));
-=======
-    csma.SetChannelAttribute ("DataRate", StringValue ("50Mbps"));
->>>>>>> 4ccd20a (Update)
-    csma.SetChannelAttribute ("Delay", TimeValue (NanoSeconds (6560)));
+    csma.SetChannelAttribute ("DataRate", StringValue ("1Mbps"));
+    csma.SetChannelAttribute ("Delay", StringValue("0.01ms"));
+
+    NetDeviceContainer devices;
+    devices = pointToPoint.Install (p2pNodes);
+
+    //Ptr<RateErrorModel> em = CreateObject<RateErrorModel> ();
+    //em->SetAttribute ("ErrorRate", DoubleValue (0.0001));
+    //devices.Get (1)->SetAttribute ("ReceiveErrorModel", PointerValue (em));
 
     NetDeviceContainer csmaDevices;
     csmaDevices = csma.Install (csmaNodes);
@@ -215,17 +337,10 @@ SeedManager::SetSeed(r); // Set the seed to the desired number
     // create folder so we can log the positions of the clients
     const char * mylogsDir = dashLogDirectory.c_str();
     mkdir (mylogsDir, 0775);
-<<<<<<< HEAD
-    std::string algodirstr (dashLogDirectory +  adaptationAlgo + "/" + save_tcpVariant);  
-    const char * algodir = algodirstr.c_str();
-    mkdir (algodir, 0775);
-    std::string dirstr (dashLogDirectory + adaptationAlgo + "/" + save_tcpVariant + "/" + ToString (numberOfClients) + "/");
-=======
     std::string algodirstr (dashLogDirectory +  adaptationAlgo);  
     const char * algodir = algodirstr.c_str();
     mkdir (algodir, 0775);
     std::string dirstr (dashLogDirectory + adaptationAlgo + "/" + ToString (numberOfClients) + "/");
->>>>>>> 4ccd20a (Update)
     const char * dir = dirstr.c_str();
     mkdir(dir, 0775);
 
@@ -235,7 +350,7 @@ SeedManager::SetSeed(r); // Set the seed to the desired number
         std::pair <Ptr<Node>, std::string> client (*i, adaptationAlgo);
         clients.push_back (client);
       }
-
+    
     TcpStreamServerHelper serverHelper (80);
     //serverHelper.SetAttribute ("SegmentDuration", UintegerValue (segmentDuration));
     //serverHelper.SetAttribute ("SegmentSizeFilePath", StringValue (segmentSizeFilePath));
@@ -256,12 +371,11 @@ SeedManager::SetSeed(r); // Set the seed to the desired number
     //clientHelper.SetAttribute ("Cmaf", UintegerValue (cmaf));
     //clientHelper.SetAttribute ("LogLevel", UintegerValue (logLevel));
     //clientHelper.SetAttribute ("AbrParameter", UintegerValue (ABR_parameter));
-    ApplicationContainer clientApps = clientHelper.Install (clients);
+    ApplicationContainer clientApps = clientHelper.Install (clients);   
+
+
     for (uint i = 0; i < clientApps.GetN (); i++)
     {
-<<<<<<< HEAD
-      startTime = (i * 20);
-=======
       if (save_tcpVariant == "NewReno" && adaptationAlgo == "panda"){
         startTime = (i * 277);
         //std::cout << "Im here 1" << std::endl;
@@ -282,33 +396,32 @@ SeedManager::SetSeed(r); // Set the seed to the desired number
         //std::cout << "Im here 4" << std::endl;
       }
 
->>>>>>> 4ccd20a (Update)
       clientApps.Get (i)->SetStartTime (Seconds (startTime));
     }
 
     Ipv4GlobalRoutingHelper::PopulateRoutingTables ();
-    //Simulator::Schedule (Seconds (startTime), &CalculateThroughput);
 
-<<<<<<< HEAD
-    std::cout << "Im here 3" << std::endl;
 
-    AsciiTraceHelper asciiTraceHelper;
-    Ptr<OutputStreamWrapper> stream = asciiTraceHelper.CreateFileStream ("seventh.cwnd");
-    Config::ConnectWithoutContext("/NodeList/*/$ns3::TcpL4Protocol/SocketList/*",
-      MakeBoundCallback(&SocketCreated, stream));
+    if (tracing)
+      {
+        std::ofstream ascii;
+        Ptr<OutputStreamWrapper> ascii_wrap;
+        ascii.open ((prefix_file_name + "-ascii").c_str ());
+        ascii_wrap = new OutputStreamWrapper ((prefix_file_name + "-ascii").c_str (),
+                                              std::ios::out);
+        stack.EnableAsciiIpv4All (ascii_wrap);
 
-    std::cout << "Im here 4" << std::endl;
-=======
-    //std::cout << "Im here 3" << std::endl;
+        Simulator::Schedule (Seconds (0.00001), &TraceCwnd, prefix_file_name + "-cwnd.data");
+        Simulator::Schedule (Seconds (0.00001), &TraceSsThresh, prefix_file_name + "-ssth.data");
+        Simulator::Schedule (Seconds (0.00001), &TraceRtt, prefix_file_name + "-rtt.data");
+        Simulator::Schedule (Seconds (0.00001), &TraceRto, prefix_file_name + "-rto.data");
+        Simulator::Schedule (Seconds (0.00001), &TraceNextTx, prefix_file_name + "-next-tx.data");
+        Simulator::Schedule (Seconds (0.00001), &TraceInFlight, prefix_file_name + "-inflight.data");
+        Simulator::Schedule (Seconds (0.1), &TraceNextRx, prefix_file_name + "-next-rx.data");
+      }
 
-    AsciiTraceHelper asciiTraceHelper;
-    Ptr<OutputStreamWrapper> stream = asciiTraceHelper.CreateFileStream ("teste.cwnd");
-    Config::ConnectWithoutContext("/NodeList/*/$ns3::TcpL4Protocol/SocketList/*",
-      MakeBoundCallback(&SocketCreated, stream));
-
-    //std::cout << "Im here 4" << std::endl;
->>>>>>> 4ccd20a (Update)
-
+    
+    //Simulator::Schedule (MilliSeconds (100), &CalculateThroughput);
 
     NS_LOG_INFO ("Run Simulation.");
     NS_LOG_INFO ("Sim: " << simulationId << "Clients: " << numberOfClients);
@@ -320,4 +433,5 @@ SeedManager::SetSeed(r); // Set the seed to the desired number
     seed += 1;
 
     }
-}
+    return 0;
+  }

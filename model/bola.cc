@@ -191,4 +191,8 @@ namespace ns3 {
     if(std::isnan(bitrate)) { quality = 0; }
     return quality;
   }
+<<<<<<< HEAD
 } // namespace ns3
+=======
+} // namespace ns3
+>>>>>>> 4ccd20a (Update)

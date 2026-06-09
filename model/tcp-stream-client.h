@@ -31,8 +31,11 @@
 #include "tobasco2.h"
 #include "festive.h"
 #include "panda.h"
+<<<<<<< HEAD
 #include "simple.h"
 #include "mpc.h"
+=======
+>>>>>>> 4ccd20a (Update)
 #include "bola.h"
 
 

@@ -34,12 +34,17 @@ std::string const dashLogDirectory = "dash-log-files/";
  */
 struct algorithmReply
 {
-  int64_t nextRepIndex; //!< representation level index of the next segement to be downloaded by the client
+    int64_t nextRepIndex; //!< representation level index of the next segement to be downloaded by the client
   int64_t nextDownloadDelay; //!< delay time in microseconds when the next segment shall be requested from the server
   int64_t decisionTime; //!< time in microsends when the adaptation algorithm decided which segment to download next, only for logging purposes
   int64_t decisionCase; //!< indicate in which part of the adaptation algorithm's code the decision was made, which representation level to request next, only for logging purposes
   int64_t delayDecisionCase; //!< indicate in which part of the adaptation algorithm's code the decision was made, how much time in microsends to wait until the segment shall be requested from server, only for logging purposes
   double bandwidthEstimate; //bandwidth estimated by the ABR
+<<<<<<< HEAD
+=======
+  double bufferEstimate; //buffer level estimated by the ABR
+  double secondBandwidthEstimate; //bandwidth estimated by the ABR
+>>>>>>> 4ccd20a (Update)
 };
 
 

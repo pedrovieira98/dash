@@ -28,6 +28,7 @@
 #include "ns3/uinteger.h"
 #include "ns3/trace-source-accessor.h"
 #include "tcp-stream-client.h"
+# include "ns3/trace-helper.h"
 #include <math.h>
 #include <sstream>
 #include <stdexcept>
@@ -59,7 +60,15 @@ NS_LOG_COMPONENT_DEFINE ("TcpStreamClientApplication");
 
 NS_OBJECT_ENSURE_REGISTERED (TcpStreamClient);
 
+<<<<<<< HEAD
 void TcpStreamClient::Controller (controllerEvent event)
+=======
+extern void CwndChange(ns3::Ptr<ns3::OutputStreamWrapper>,
+                       uint32_t, uint32_t);
+
+void
+TcpStreamClient::Controller (controllerEvent event)
+>>>>>>> 4ccd20a (Update)
 {
   NS_LOG_FUNCTION (this);
   
@@ -294,6 +303,7 @@ void TcpStreamClient::Initialise (std::string algorithm, uint16_t clientId)
     {
       algo = new FestiveAlgorithm (m_videoData, m_playbackData, m_bufferData, m_throughput);
     }
+<<<<<<< HEAD
   else if (algorithm == "simple")
     {
       algo = new SimpleAlgo (m_videoData, m_playbackData, m_bufferData, m_throughput);
@@ -305,6 +315,12 @@ void TcpStreamClient::Initialise (std::string algorithm, uint16_t clientId)
   else if (algorithm == "bola")
     {
       algo = new BolaAlgo (m_videoData, m_playbackData, m_bufferData, m_throughput);
+=======
+  
+  else if (algorithm == "bola")
+    {
+  algo = new BolaAlgo (m_videoData, m_playbackData, m_bufferData, m_throughput);
+>>>>>>> 4ccd20a (Update)
     }
   else
     {
@@ -518,6 +534,12 @@ void TcpStreamClient::StartApplication (void)
     {
       TypeId tid = TypeId::LookupByName ("ns3::TcpSocketFactory");
       m_socket = Socket::CreateSocket (GetNode (), tid);
+
+      AsciiTraceHelper asciiTraceHelper;
+      Ptr<OutputStreamWrapper> stream = asciiTraceHelper.CreateFileStream("client.cwnd");
+
+      m_socket->TraceConnectWithoutContext("CongestionWindow", MakeBoundCallback(&CwndChange, stream));
+
       if (Ipv4Address::IsMatchingType (m_peerAddress) == true)
         {
           m_socket->Connect (InetSocketAddress (Ipv4Address::ConvertFrom (m_peerAddress), m_peerPort));
@@ -530,6 +552,7 @@ void TcpStreamClient::StartApplication (void)
         MakeCallback (&TcpStreamClient::ConnectionSucceeded, this),
         MakeCallback (&TcpStreamClient::ConnectionFailed, this));
       m_socket->SetRecvCallback (MakeCallback (&TcpStreamClient::HandleRead, this));
+
     }
 }
 

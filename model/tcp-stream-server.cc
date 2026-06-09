@@ -27,6 +27,7 @@
 #include "ns3/tcp-socket.h"
 #include "ns3/simulator.h"
 #include "ns3/socket-factory.h"
+#include "ns3/trace-helper.h"
 #include "ns3/packet.h"
 #include "ns3/uinteger.h"
 #include "ns3/tcp-socket-factory.h"
@@ -69,6 +70,9 @@ TcpStreamServer::~TcpStreamServer ()
   m_socket6 = 0;
 }
 
+extern void CwndChange(ns3::Ptr<ns3::OutputStreamWrapper>,
+                       uint32_t, uint32_t);
+
 void
 TcpStreamServer::DoDispose (void)
 {
@@ -85,6 +89,13 @@ TcpStreamServer::StartApplication (void)
     {
       TypeId tid = TypeId::LookupByName ("ns3::TcpSocketFactory");
       m_socket = Socket::CreateSocket (GetNode (), tid);
+
+      // ADD TRACE FOR SERVER
+      AsciiTraceHelper asciiTraceHelper;
+      Ptr<OutputStreamWrapper> stream =
+      asciiTraceHelper.CreateFileStream("server.cwnd");
+      m_socket->TraceConnectWithoutContext("CongestionWindow", MakeBoundCallback(&CwndChange, stream));
+
       InetSocketAddress local = InetSocketAddress (Ipv4Address::GetAny (), m_port);
       m_socket->Bind (local);
       m_socket->Listen ();
